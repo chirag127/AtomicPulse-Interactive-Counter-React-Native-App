@@ -1,0 +1,113 @@
+# CI/CD Pipeline for AtomicPulse Interactive Counter
+# Enforcing Apex Standard: Zero-Defect, High-Velocity, Future-Proof
+
+name: AtomicPulse CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Dependency Resolution and Linting (Fast Feedback Loop)
+  lint_and_format:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js (React Native Environment)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Using a stable, supported LTS version
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies (using npm for Expo/RN)
+        run: npm ci
+
+      - name: 📏 Lint Code with Biome (Apex Standard)
+        # Assuming Biome is configured for TypeScript/React Native project for fast linting
+        run: npx @biomejs/biome check --apply=false ./src
+
+      - name: 💅 Check Formatting
+        run: npx @biomejs/biome check --apply=false --formatter-strategy=if-not-formatted ./src
+
+  # Job 2: Unit Testing (Vitest)
+  unit_tests:
+    name: Vitest Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint_and_format
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🧪 Run Vitest Unit Tests
+        # Assuming Vitest is configured to output JUnit format for Codecov
+        run: npx vitest run --coverage --outputFile=./coverage/vitest-report.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/vitest-report.xml
+          name: atomicpulse-counter-unit
+          flags: unit
+
+  # Job 3: Platform Build Check (Basic E2E Simulation via Expo/Simulators)
+  build_check:
+    name: Build Check (iOS/Android Simulation)
+    runs-on: macos-latest # Required for robust React Native environment setup
+    needs: unit_tests
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔗 Install Expo Go (for basic checks)
+        # Ensure necessary tools for simulation are present
+        run: npm install -g expo-cli
+
+      - name: 🏗️ Build Standalone Android APK (Staging)
+        # Using EAS build command structure for a more realistic check, though this requires secrets setup usually.
+        # For a basic CI check, we use expo build/prebuild.
+        run: npx expo build:android --no-publish --profile preview
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 🏗️ Build Standalone iOS Simulator Archive (Staging)
+        run: npx expo build:ios --no-publish --profile preview
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  # Deployment is typically handled separately for mobile apps, but we mark success here.
+  deploy:
+    name: Mark Success
+    runs-on: ubuntu-latest
+    needs: build_check
+    if: success()
+    steps:
+      - name: ✅ Workflow Completion Notification
+        run: echo "AtomicPulse CI/CD Pipeline completed successfully for ${{ github.ref_name }}. Ready for manual review/store submission."
